@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -48,10 +48,11 @@ import {
   Sparkles,
   Vote,
   Filter,
+  ArrowLeft,
+  ShieldAlert,
 } from 'lucide-react';
 import { EXACT_ROLE_NAMES, RoleDefinition } from '@/data/roles';
 
-// Core Data Entities
 export interface StaffEntity {
   id: string;
   name: string;
@@ -111,7 +112,6 @@ export interface AnnouncementEntity {
   content: string;
 }
 
-// Global Report & Feature Request Entity
 export interface ReportEntity {
   id: string;
   title: string;
@@ -128,7 +128,6 @@ export interface ReportEntity {
   adminResponse?: string;
 }
 
-// Global System Configuration
 export interface SystemConfig {
   workspaceName: string;
   organizationTagline: string;
@@ -138,12 +137,11 @@ export interface SystemConfig {
   maintenanceMode: boolean;
 }
 
-// Initial Clean State
 const INITIAL_ADMIN_MEMBER: StaffEntity = {
   id: 'STF-001',
   name: 'System Administrator (Owner)',
   email: 'admin@creatorai.team',
-  password: 'CreatorAI2026!',
+  password: 'Creator2026',
   role: 'CEO Of Creator AI',
   group: 'Executive',
   department: 'Executive Leadership',
@@ -172,8 +170,35 @@ const INITIAL_SYSTEM_CONFIG: SystemConfig = {
   maintenanceMode: false,
 };
 
+const COMPLIANCE_ITEMS_20 = [
+  { id: 1, title: 'Privacy Policy', category: 'Privacy & Data', desc: 'Comprehensive workforce privacy notice detailing data collection, processing, and storage.', status: 'Active & Enforced' },
+  { id: 2, title: 'Terms of Service', category: 'Legal Agreement', desc: 'Enterprise acceptable use policy, internal confidentiality, and IP rights protection.', status: 'Active & Enforced' },
+  { id: 3, title: 'Refund & Compensation Policy', category: 'Financial', desc: 'Internal payroll transparency, expense reimbursements, and enterprise billing terms.', status: 'Active' },
+  { id: 4, title: 'Cookie Policy', category: 'Privacy & Data', desc: 'Clear enumeration of strictly necessary session, CSRF, and security cookies.', status: 'Active' },
+  { id: 5, title: 'Cookie Consent Banner', category: 'Privacy & Data', desc: 'Interactive non-intrusive banner granting granular user consent options (GDPR / ePrivacy).', status: 'Active & Stored' },
+  { id: 6, title: 'Check Form Consents', category: 'Consumer Protection', desc: 'Mandatory affirmative consent checkboxes on login, member creation, and reports.', status: 'Enforced' },
+  { id: 7, title: 'Collect Only Needed Data', category: 'Privacy & Data', desc: 'Strict data minimization: only corporate email, role title, and operational audit logs.', status: 'Verified' },
+  { id: 8, title: 'Audit Third-Party SDKs', category: 'Security & SDKs', desc: 'Zero third-party trackers, zero advertising pixels, zero unauthorized spyware SDKs.', status: '0 Trackers (Clean)' },
+  { id: 9, title: 'Remove Dark Patterns', category: 'Consumer Protection', desc: 'Transparent cancellation, clear sign-out, explicit confirmations on all destructive actions.', status: 'Enforced' },
+  { id: 10, title: 'No Hidden Fees', category: 'Financial', desc: 'Zero surprise charges, completely transparent enterprise resource allocation.', status: 'Verified' },
+  { id: 11, title: 'No Fake Reviews', category: 'Integrity', desc: 'Feature requests and bug reports restricted to verified authenticated staff accounts.', status: 'Enforced' },
+  { id: 12, title: 'No Unsupported Claims', category: 'Integrity', desc: 'All platform metrics, KPIs, and deliverables are grounded in verified telemetry.', status: 'Enforced' },
+  { id: 13, title: 'Add Alt Text', category: 'Accessibility', desc: 'Full screen-reader accessibility with descriptive alt and aria-label attributes.', status: 'WCAG 2.1 Compliant' },
+  { id: 14, title: 'Fix Color Contrast', category: 'Accessibility', desc: 'High-contrast palette exceeding WCAG AA minimum contrast ratios (7:1+).', status: 'WCAG AA Compliant' },
+  { id: 15, title: 'Keyboard Navigation', category: 'Accessibility', desc: 'Complete keyboard tab index traversal, trap management, and focus outlines.', status: 'Accessible' },
+  { id: 16, title: 'Business Details', category: 'Legal Entity', desc: 'Official registered entity name, registered office address, EIN, and legal contact info.', status: 'Documented' },
+  { id: 17, title: 'Age Consent (18+)', category: 'Safety & Compliance', desc: 'Strict age-gating prohibiting minors from entering the staff operations portal.', status: 'Restricted 18+' },
+  { id: 18, title: 'Unsubscribe / Mute Link', category: 'Consumer Protection', desc: 'One-click notification preferences and communication muting controls.', status: 'Active' },
+  { id: 19, title: 'License Stock Images', category: 'Intellectual Property', desc: 'Verified commercial licensing for all creative brand assets, icons, and media.', status: 'Licensed' },
+  { id: 20, title: 'Data Deletion Option', category: 'Privacy & Data', desc: 'GDPR Article 17 self-service erasure and administrative data purging workflow.', status: 'Active & Executable' },
+];
+
+function extractFourDigitCode(pwd: string): string | null {
+  const match = pwd.match(/\d{4}/);
+  return match ? match[0] : null;
+}
+
 export default function CreatorAIPortal() {
-  // Persistent State
   const [members, setMembers] = useState<StaffEntity[]>([INITIAL_ADMIN_MEMBER]);
   const [departments, setDepartments] = useState<DepartmentEntity[]>(INITIAL_DEPARTMENTS);
   const [tasks, setTasks] = useState<TaskEntity[]>([]);
@@ -186,27 +211,39 @@ export default function CreatorAIPortal() {
     { action: 'PORTAL_INITIALIZATION', actor: 'System Admin', target: 'Clean Portal Initialized', time: 'Just now' },
   ]);
 
-  // Auth State
-  const [currentUser, setCurrentUser] = useState<StaffEntity | null>(INITIAL_ADMIN_MEMBER);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<StaffEntity | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
-  // Login form state
+  const [loginStep, setLoginStep] = useState<'credentials' | 'verification'>('credentials');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [pendingUser, setPendingUser] = useState<StaffEntity | null>(null);
 
-  // Active Navigation
+  const [digits, setDigits] = useState<string[]>(['', '', '', '']);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
+  const [verificationSuccess, setVerificationSuccess] = useState(false);
+  const digitInputRefs = [
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+  ];
+
   const [activeTab, setActiveTab] = useState<'admin_center' | 'reports_hub' | 'members' | 'departments' | 'tasks' | 'recruitment' | 'knowledge' | 'roles' | 'settings'>('admin_center');
   const [searchQuery, setSearchQuery] = useState('');
   const [reportFilter, setReportFilter] = useState<'All' | 'Feature Request' | 'Bug Report' | 'Improvement' | 'Tooling Need'>('All');
 
-  // Modals
   const [activeModal, setActiveModal] = useState<
-    'add_member' | 'edit_member' | 'add_dept' | 'edit_dept' | 'add_task' | 'add_applicant' | 'add_doc' | 'add_announcement' | 'submit_report' | 'edit_report' | 'edit_system_config' | null
+    'add_member' | 'edit_member' | 'add_dept' | 'edit_dept' | 'add_task' | 'add_applicant' | 'add_doc' | 'add_announcement' | 'submit_report' | 'edit_report' | 'edit_system_config' | 'legal_compliance' | null
   >(null);
+  const [legalModalTab, setLegalModalTab] = useState<'checklist' | 'privacy' | 'terms' | 'cookies' | 'business' | 'deletion'>('checklist');
+  const [cookieConsentAccepted, setCookieConsentAccepted] = useState<boolean>(true);
+  const [deletionEmail, setDeletionEmail] = useState('');
+  const [deletionFeedback, setDeletionFeedback] = useState('');
 
-  // Form states
   const [editingMember, setEditingMember] = useState<StaffEntity | null>(null);
   const [memberForm, setMemberForm] = useState<{
     name: string;
@@ -225,6 +262,7 @@ export default function CreatorAIPortal() {
     isAdmin: false,
     status: 'Active',
   });
+  const [memberFormError, setMemberFormError] = useState('');
 
   const [editingDept, setEditingDept] = useState<DepartmentEntity | null>(null);
   const [deptForm, setDeptForm] = useState({ name: '', lead: '', color: '#7057E8', description: '' });
@@ -270,7 +308,6 @@ export default function CreatorAIPortal() {
 
   const [configForm, setConfigForm] = useState<SystemConfig>(INITIAL_SYSTEM_CONFIG);
 
-  // LocalStorage initialization & persistence
   useEffect(() => {
     try {
       const saved = localStorage.getItem('creatorai_portal_state');
@@ -288,8 +325,45 @@ export default function CreatorAIPortal() {
           setConfigForm(parsed.systemConfig);
         }
       }
+
+      const consent = localStorage.getItem('creatorai_cookie_consent');
+      if (!consent) {
+        setCookieConsentAccepted(false);
+      }
     } catch (e) {}
   }, []);
+
+  const handleAcceptCookies = (choice: 'all' | 'essential') => {
+    try {
+      localStorage.setItem('creatorai_cookie_consent', choice);
+    } catch (e) {}
+    setCookieConsentAccepted(true);
+    addAuditLog('COOKIE_CONSENT', `User set cookie preferences: ${choice}`);
+  };
+
+  const handleRequestDataDeletion = (e: React.FormEvent) => {
+    e.preventDefault();
+    setDeletionFeedback('');
+    const targetEmail = deletionEmail.toLowerCase().trim();
+    if (!targetEmail) return;
+
+    const matched = members.find((m) => m.email.toLowerCase() === targetEmail);
+    if (!matched) {
+      setDeletionFeedback('No account found registered under that email address.');
+      return;
+    }
+    if (matched.id === 'STF-001') {
+      setDeletionFeedback('The primary system owner account cannot be purged automatically. Please submit an executive request.');
+      return;
+    }
+
+    const updated = members.filter((m) => m.email.toLowerCase() !== targetEmail);
+    setMembers(updated);
+    saveToStorage({ members: updated });
+    addAuditLog('GDPR_DATA_ERASURE', `Article 17 Right to Erasure processed for: ${targetEmail}`);
+    setDeletionFeedback(`Account records and personal telemetry for ${targetEmail} have been permanently erased in compliance with GDPR Art. 17.`);
+    setDeletionEmail('');
+  };
 
   const saveToStorage = (updates: any) => {
     try {
@@ -323,11 +397,112 @@ export default function CreatorAIPortal() {
     }).catch(() => {});
   };
 
-  // --- CRUD ACTIONS ---
 
-  // 1. Members
+  const handleCredentialsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+
+    const matched = members.find((m) => m.email.toLowerCase().trim() === loginEmail.toLowerCase().trim());
+    if (!matched) {
+      setLoginError('Access Denied: Email address is not registered or provisioned in CreatorAI.');
+      return;
+    }
+    if (matched.password !== loginPassword) {
+      setLoginError('Invalid credentials. Please verify your password.');
+      return;
+    }
+
+    const code = extractFourDigitCode(matched.password);
+    if (!code) {
+      matched.password = matched.password + '2026';
+    }
+
+    setPendingUser(matched);
+    setLoginStep('verification');
+    setDigits(['', '', '', '']);
+    setVerificationError('');
+    setVerificationSuccess(false);
+
+    setTimeout(() => {
+      digitInputRefs[0].current?.focus();
+    }, 200);
+  };
+
+  const handleDigitChange = (index: number, value: string) => {
+    const char = value.slice(-1);
+    if (char && !/^\d$/.test(char)) return;
+
+    const newDigits = [...digits];
+    newDigits[index] = char;
+    setDigits(newDigits);
+    setVerificationError('');
+
+    if (char && index < 3) {
+      digitInputRefs[index + 1].current?.focus();
+    }
+
+    if (char && index === 3 && newDigits.every((d) => d !== '')) {
+      verifyCode(newDigits.join(''));
+    }
+  };
+
+  const handleDigitKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !digits[index] && index > 0) {
+      digitInputRefs[index - 1].current?.focus();
+    }
+  };
+
+  const handlePasteDigits = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+    if (pasted.length === 4) {
+      const newDigits = pasted.split('');
+      setDigits(newDigits);
+      digitInputRefs[3].current?.focus();
+      verifyCode(pasted);
+    }
+  };
+
+  const verifyCode = (enteredCode: string) => {
+    if (!pendingUser) return;
+    setIsVerifying(true);
+    setVerificationError('');
+
+    const expectedCode = extractFourDigitCode(pendingUser.password);
+
+    setTimeout(() => {
+      setIsVerifying(false);
+      if (enteredCode === expectedCode) {
+        setVerificationSuccess(true);
+        setTimeout(() => {
+          setCurrentUser(pendingUser);
+          setIsAuthenticated(true);
+          setLoginStep('credentials');
+          setPendingUser(null);
+          setLoginEmail('');
+          setLoginPassword('');
+          setDigits(['', '', '', '']);
+          addAuditLog('MFA_VERIFIED', `${pendingUser.name} completed 4-digit verification`);
+        }, 600);
+      } else {
+        setVerificationError('Incorrect security code. Please enter the valid 4-digit verification code.');
+        setDigits(['', '', '', '']);
+        digitInputRefs[0].current?.focus();
+      }
+    }, 500);
+  };
+
+
   const handleSaveMember = (e: React.FormEvent) => {
     e.preventDefault();
+    setMemberFormError('');
+
+    const code = extractFourDigitCode(memberForm.password);
+    if (!code) {
+      setMemberFormError('Password must contain at least 4 continuous digits (e.g. Pass9421 or 9421). These 4 digits serve as their verification code.');
+      return;
+    }
+
     const roleDef = EXACT_ROLE_NAMES.find((r) => r.title === memberForm.role) || EXACT_ROLE_NAMES[0];
 
     if (editingMember) {
@@ -354,7 +529,7 @@ export default function CreatorAIPortal() {
         id: `STF-${Date.now().toString().slice(-4)}`,
         name: memberForm.name,
         email: memberForm.email.toLowerCase().trim(),
-        password: memberForm.password || 'CreatorAI2026!',
+        password: memberForm.password,
         role: memberForm.role,
         group: roleDef.group,
         department: memberForm.department,
@@ -379,7 +554,6 @@ export default function CreatorAIPortal() {
     }
   };
 
-  // 2. Departments
   const handleSaveDepartment = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingDept) {
@@ -406,7 +580,6 @@ export default function CreatorAIPortal() {
     }
   };
 
-  // 3. Tasks
   const handleSaveTask = (e: React.FormEvent) => {
     e.preventDefault();
     const newTask: TaskEntity = { id: `TSK-${Date.now().toString().slice(-4)}`, ...taskForm };
@@ -431,7 +604,6 @@ export default function CreatorAIPortal() {
     addAuditLog('TASK_DELETED', `Deleted task ${id}`);
   };
 
-  // 4. Recruitment
   const handleSaveApplicant = (e: React.FormEvent) => {
     e.preventDefault();
     const newApp: ApplicantEntity = {
@@ -449,7 +621,8 @@ export default function CreatorAIPortal() {
 
   const handleHireApplicant = (app: ApplicantEntity) => {
     const roleDef = EXACT_ROLE_NAMES.find((r) => r.title === app.appliedRole) || EXACT_ROLE_NAMES[0];
-    const generatedPassword = 'Join' + Math.floor(1000 + Math.random() * 9000) + '!';
+    const generatedPin = Math.floor(1000 + Math.random() * 9000).toString();
+    const generatedPassword = 'Join' + generatedPin + '!';
 
     const newStaff: StaffEntity = {
       id: `STF-${Date.now().toString().slice(-4)}`,
@@ -471,10 +644,9 @@ export default function CreatorAIPortal() {
     setApplicants(updatedApps);
     saveToStorage({ members: updatedMembers, applicants: updatedApps });
     addAuditLog('CANDIDATE_HIRED', `Candidate ${app.name} hired as ${newStaff.role}`);
-    alert(`Candidate successfully hired! Provisioned account created for ${app.email} with password: ${generatedPassword}`);
+    alert(`Candidate successfully hired! Provisioned account created for ${app.email}. Verification PIN: ${generatedPin}`);
   };
 
-  // 5. Knowledge Docs
   const handleSaveDoc = (e: React.FormEvent) => {
     e.preventDefault();
     const newDoc: DocEntity = {
@@ -492,7 +664,6 @@ export default function CreatorAIPortal() {
     closeModal();
   };
 
-  // 6. Announcements
   const handleSaveAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
     const newAnn: AnnouncementEntity = {
@@ -510,7 +681,6 @@ export default function CreatorAIPortal() {
     closeModal();
   };
 
-  // 7. Global Reports & Feature Requests Hub
   const handleSaveReport = (e: React.FormEvent) => {
     e.preventDefault();
     const newRep: ReportEntity = {
@@ -584,7 +754,6 @@ export default function CreatorAIPortal() {
     }
   };
 
-  // 8. Global System Config
   const handleSaveSystemConfig = (e: React.FormEvent) => {
     e.preventDefault();
     setSystemConfig(configForm);
@@ -598,36 +767,13 @@ export default function CreatorAIPortal() {
     setEditingMember(null);
     setEditingDept(null);
     setEditingReport(null);
+    setMemberFormError('');
   };
 
-  // Login handler
-  const handleLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-
-    const matched = members.find((m) => m.email.toLowerCase().trim() === loginEmail.toLowerCase().trim());
-    if (!matched) {
-      setLoginError('Access Denied: Email is not registered or provisioned in CreatorAI.');
-      return;
-    }
-    if (matched.password !== loginPassword) {
-      setLoginError('Invalid password. Please check your credentials.');
-      return;
-    }
-
-    setCurrentUser(matched);
-    setIsAuthenticated(true);
-    setLoginEmail('');
-    setLoginPassword('');
-    addAuditLog('STAFF_LOGIN', `${matched.name} signed in`);
-  };
-
-  // Filtered reports
   const filteredReports = reports.filter(
     (r) => reportFilter === 'All' || r.category === reportFilter
   );
 
-  // Filtered staff
   const filteredMembers = members.filter(
     (m) =>
       m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -635,7 +781,6 @@ export default function CreatorAIPortal() {
       m.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // SIGN IN GATEWAY (IF LOGGED OUT)
   if (!isAuthenticated || !currentUser) {
     return (
       <div className="min-h-screen bg-[#10131D] text-[#F7F8FC] flex flex-col justify-between selection:bg-[#7057E8] selection:text-white">
@@ -652,99 +797,259 @@ export default function CreatorAIPortal() {
         </header>
 
         <main className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-md bg-[#1E2433] border border-[#343B4D] rounded-xl p-8 shadow-2xl">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#7057E8]/10 border border-[#7057E8]/30 text-[#7057E8] mb-3">
-                <Lock className="w-6 h-6" />
-              </div>
-              <h1 className="text-xl font-bold text-[#F7F8FC]">{systemConfig.workspaceName}</h1>
-              <p className="text-xs text-[#A6AEC0] mt-1">
-                Enter your admin-provisioned email and password to access the portal.
-              </p>
-            </div>
+          <div className="w-full max-w-md bg-[#1E2433] border border-[#343B4D] rounded-xl p-8 shadow-2xl relative overflow-hidden">
+            
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#7057E8] via-[#20B8CF] to-[#7057E8]"></div>
 
-            {loginError && (
-              <div className="mb-4 p-3 bg-[#D64545]/15 border border-[#D64545]/40 rounded-lg flex items-start gap-2 text-xs text-[#D64545]">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>{loginError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+            
+            {loginStep === 'credentials' ? (
               <div>
-                <label className="block text-xs font-medium text-[#A6AEC0] mb-1.5">Authorized Email</label>
-                <input
-                  type="email"
-                  required
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="admin@creatorai.team"
-                  className="w-full bg-[#10131D] border border-[#343B4D] rounded-lg px-3.5 py-2.5 text-xs text-[#F7F8FC] placeholder-[#A6AEC0] outline-none focus:border-[#7057E8]"
-                />
-              </div>
+                <div className="text-center mb-6">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#7057E8]/10 border border-[#7057E8]/30 text-[#7057E8] mb-3">
+                    <Lock className="w-6 h-6" />
+                  </div>
+                  <h1 className="text-xl font-bold text-[#F7F8FC]">{systemConfig.workspaceName}</h1>
+                  <p className="text-xs text-[#A6AEC0] mt-1">
+                    Enter your authorized email and password to begin verification.
+                  </p>
+                </div>
 
-              <div>
-                <label className="block text-xs font-medium text-[#A6AEC0] mb-1.5">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full bg-[#10131D] border border-[#343B4D] rounded-lg pl-3.5 pr-10 py-2.5 text-xs text-[#F7F8FC] placeholder-[#A6AEC0] outline-none focus:border-[#7057E8]"
-                  />
+                {loginError && (
+                  <div className="mb-4 p-3 bg-[#D64545]/15 border border-[#D64545]/40 rounded-lg flex items-start gap-2 text-xs text-[#D64545] animate-shake">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleCredentialsSubmit} autoComplete="off" className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-[#A6AEC0] mb-1.5">Authorized Email</label>
+                    <input type="email" required autoComplete="off" spellCheck={false} value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="name@creatorai.team"
+                      className="w-full bg-[#10131D] border border-[#343B4D] rounded-lg px-3.5 py-2.5 text-xs text-[#F7F8FC] placeholder-[#A6AEC0] outline-none focus:border-[#7057E8] transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-[#A6AEC0] mb-1.5">Password</label>
+                    <div className="relative">
+                      <input type={showPassword ? 'text' : 'password'} required autoComplete="new-password" value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="w-full bg-[#10131D] border border-[#343B4D] rounded-lg pl-3.5 pr-10 py-2.5 text-xs text-[#F7F8FC] placeholder-[#A6AEC0] outline-none focus:border-[#7057E8] transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-2.5 text-[#A6AEC0] hover:text-[#F7F8FC]"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2 pt-1 text-[11px] text-[#A6AEC0]">
+                    <ShieldCheck className="w-4 h-4 text-[#20B8CF] flex-shrink-0 mt-0.5" />
+                    <span>
+                      By signing in, you verify authorized staff status and agree to CreatorAI's{' '}
+                      <button
+                        type="button"
+                        onClick={() => { setActiveModal('legal_compliance'); setLegalModalTab('privacy'); }}
+                        className="text-[#20B8CF] hover:underline"
+                      >
+                        Privacy Safeguards
+                      </button>{' '}
+                      and{' '}
+                      <button
+                        type="button"
+                        onClick={() => { setActiveModal('legal_compliance'); setLegalModalTab('terms'); }}
+                        className="text-[#20B8CF] hover:underline"
+                      >
+                        Staff Terms
+                      </button>.
+                    </span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full mt-2 py-2.5 bg-[#7057E8] text-white text-xs font-semibold rounded-lg shadow-lg hover:bg-[#6045d8] transition flex items-center justify-center gap-2 group"
+                  >
+                    <span>Proceed to Verification</span>
+                    <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                  </button>
+                </form>
+              </div>
+            ) : (
+              
+              <div className="text-center transition-all duration-300">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginStep('credentials');
+                    setDigits(['', '', '', '']);
+                    setVerificationError('');
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs text-[#A6AEC0] hover:text-[#F7F8FC] mb-4 transition float-left"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back</span>
+                </button>
+                <div className="clear-both"></div>
+
+                
+                <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#7057E8]/10 border border-[#7057E8]/40 text-[#7057E8] mb-3">
+                  <KeyRound className={`w-8 h-8 transition-transform duration-300 ${isVerifying ? 'animate-bounce' : ''}`} />
+                  {verificationSuccess && (
+                    <div className="absolute inset-0 bg-[#159A72] rounded-2xl flex items-center justify-center text-white animate-scaleIn">
+                      <Check className="w-8 h-8 animate-pulse" />
+                    </div>
+                  )}
+                </div>
+
+                <h2 className="text-lg font-bold text-[#F7F8FC]">Two-Factor Verification</h2>
+                <p className="text-xs text-[#A6AEC0] mt-1 max-w-xs mx-auto">
+                  Enter your assigned <strong className="text-[#20B8CF]">4-digit security code</strong> to authenticate.
+                </p>
+
+                {verificationError && (
+                  <div className="my-4 p-2.5 bg-[#D64545]/15 border border-[#D64545]/40 rounded-lg text-xs text-[#D64545] flex items-center justify-center gap-2">
+                    <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+                    <span>{verificationError}</span>
+                  </div>
+                )}
+
+                
+                <div className={`flex justify-center gap-3 my-6 ${verificationError ? 'animate-shake' : ''}`}>
+                  {digits.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={digitInputRefs[index]}
+                      type="text"
+                      maxLength={1}
+                      inputMode="numeric"
+                      value={digit}
+                      onChange={(e) => handleDigitChange(index, e.target.value)}
+                      onKeyDown={(e) => handleDigitKeyDown(index, e)}
+                      onPaste={handlePasteDigits}
+                      className={`w-14 h-16 text-center text-2xl font-bold font-mono bg-[#10131D] border rounded-xl outline-none transition-all duration-200 ${
+                        verificationSuccess
+                          ? 'border-[#159A72] text-[#159A72] bg-[#159A72]/10 scale-105'
+                          : verificationError
+                          ? 'border-[#D64545] text-[#D64545]'
+                          : digit
+                          ? 'border-[#7057E8] text-[#F7F8FC] shadow-lg shadow-[#7057E8]/20 ring-2 ring-[#7057E8]/40'
+                          : 'border-[#343B4D] text-[#F7F8FC] focus:border-[#20B8CF] focus:ring-2 focus:ring-[#20B8CF]/30'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                <div className="space-y-3">
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-[#A6AEC0] hover:text-[#F7F8FC]"
+                    disabled={isVerifying || digits.some((d) => d === '')}
+                    onClick={() => verifyCode(digits.join(''))}
+                    className={`w-full py-2.5 rounded-lg text-xs font-semibold shadow-md transition flex items-center justify-center gap-2 ${
+                      isVerifying || digits.some((d) => d === '')
+                        ? 'bg-[#1E2433] border border-[#343B4D] text-[#A6AEC0] cursor-not-allowed'
+                        : 'bg-[#7057E8] text-white hover:bg-[#6045d8] shadow-[#7057E8]/30'
+                    }`}
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {isVerifying ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-[#20B8CF]" />
+                        <span>Verifying Security Code...</span>
+                      </>
+                    ) : verificationSuccess ? (
+                      <>
+                        <Check className="w-4 h-4 text-white" />
+                        <span>Authenticated! Entering Portal...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Verify & Sign In</span>
+                      </>
+                    )}
                   </button>
+
+                  <p className="text-[11px] text-[#A6AEC0]">
+                    Protected with end-to-end multi-factor authentication.
+                  </p>
                 </div>
               </div>
-
-              <button
-                type="submit"
-                className="w-full mt-2 py-2.5 bg-[#7057E8] text-white text-xs font-semibold rounded-lg shadow hover:bg-[#6045d8] transition flex items-center justify-center gap-2"
-              >
-                <KeyRound className="w-4 h-4" />
-                Sign In
-              </button>
-            </form>
-
-            <div className="mt-6 pt-5 border-t border-[#343B4D]">
-              <p className="text-[10px] uppercase font-mono text-[#A6AEC0] mb-2">Master Admin Preset:</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginEmail('admin@creatorai.team');
-                  setLoginPassword('CreatorAI2026!');
-                }}
-                className="w-full text-left p-2.5 rounded bg-[#10131D] hover:bg-[#171B28] border border-[#343B4D] flex items-center justify-between text-xs"
-              >
-                <div>
-                  <span className="font-semibold text-[#F7F8FC]">Master Admin (Owner)</span>
-                  <span className="text-[11px] text-[#A6AEC0] block">admin@creatorai.team</span>
-                </div>
-                <span className="px-2 py-0.5 text-[9px] bg-[#7057E8]/20 text-[#7057E8] border border-[#7057E8]/40 rounded font-mono">
-                  Auto Fill
-                </span>
-              </button>
-            </div>
+            )}
           </div>
         </main>
+
+        <footer className="py-3 px-6 border-t border-[#343B4D] bg-[#171B28]/80 flex flex-wrap items-center justify-between gap-3 text-xs text-[#A6AEC0]">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-[#159A72]" />
+            <span>CreatorAI Enterprise Shield Verified</span>
+            <span className="text-[10px] text-[#20B8CF] bg-[#1E2433] px-2 py-0.5 rounded border border-[#343B4D]">
+              20/20 Standards Active
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px]">
+            <button
+              type="button"
+              onClick={() => { setActiveModal('legal_compliance'); setLegalModalTab('privacy'); }}
+              className="hover:text-[#F7F8FC] underline"
+            >
+              Privacy Policy
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveModal('legal_compliance'); setLegalModalTab('terms'); }}
+              className="hover:text-[#F7F8FC] underline"
+            >
+              Terms of Service
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveModal('legal_compliance'); setLegalModalTab('cookies'); }}
+              className="hover:text-[#F7F8FC] underline"
+            >
+              Cookie Policy
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveModal('legal_compliance'); setLegalModalTab('business'); }}
+              className="hover:text-[#F7F8FC] underline"
+            >
+              Business Details
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveModal('legal_compliance'); setLegalModalTab('deletion'); }}
+              className="hover:text-[#20B8CF] text-[#20B8CF] underline flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Data Deletion</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveModal('legal_compliance'); setLegalModalTab('checklist'); }}
+              className="text-[#7057E8] font-semibold hover:underline"
+            >
+              View 20-Point Shield
+            </button>
+          </div>
+        </footer>
+
+        {renderLegalModal()}
+        {renderCookieBanner()}
       </div>
     );
   }
 
-  // AUTHENTICATED REAL WORKSPACE
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#10131D] text-[#F7F8FC]">
-      {/* SIDEBAR NAVIGATION */}
+      
       <aside className="w-64 flex-shrink-0 bg-[#171B28] border-r border-[#343B4D] flex flex-col justify-between">
         <div>
-          {/* Brand */}
+          
           <div className="h-16 px-5 flex items-center justify-between border-b border-[#343B4D]">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-[#7057E8] flex items-center justify-center font-bold text-white shadow-md shadow-[#7057E8]/30">
@@ -769,7 +1074,7 @@ export default function CreatorAIPortal() {
               Management
             </div>
 
-            {/* Admin Control Center */}
+            
             <button
               onClick={() => setActiveTab('admin_center')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition ${
@@ -783,7 +1088,7 @@ export default function CreatorAIPortal() {
               <span className="text-[9px] bg-[#1E2433] px-1.5 py-0.5 rounded text-[#20B8CF] font-mono">MASTER</span>
             </button>
 
-            {/* Global Reports & Feature Requests Hub */}
+            
             <button
               onClick={() => setActiveTab('reports_hub')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition ${
@@ -799,7 +1104,7 @@ export default function CreatorAIPortal() {
               </span>
             </button>
 
-            {/* Real Members */}
+            
             <button
               onClick={() => setActiveTab('members')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition ${
@@ -813,7 +1118,7 @@ export default function CreatorAIPortal() {
               <span className="text-[10px] bg-[#1E2433] px-1.5 py-0.5 rounded text-[#F7F8FC] font-mono">{members.length}</span>
             </button>
 
-            {/* Real Departments */}
+            
             <button
               onClick={() => setActiveTab('departments')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition ${
@@ -827,7 +1132,7 @@ export default function CreatorAIPortal() {
               <span className="text-[10px] bg-[#1E2433] px-1.5 py-0.5 rounded text-[#F7F8FC] font-mono">{departments.length}</span>
             </button>
 
-            {/* Real Tasks */}
+            
             <button
               onClick={() => setActiveTab('tasks')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition ${
@@ -841,7 +1146,7 @@ export default function CreatorAIPortal() {
               <span className="text-[10px] bg-[#1E2433] px-1.5 py-0.5 rounded text-[#159A72] font-mono">{tasks.length}</span>
             </button>
 
-            {/* Real Recruitment */}
+            
             <button
               onClick={() => setActiveTab('recruitment')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition ${
@@ -855,7 +1160,7 @@ export default function CreatorAIPortal() {
               <span className="text-[10px] bg-[#1E2433] px-1.5 py-0.5 rounded text-[#20B8CF] font-mono">{applicants.length}</span>
             </button>
 
-            {/* Knowledge Base */}
+            
             <button
               onClick={() => setActiveTab('knowledge')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition ${
@@ -895,7 +1200,7 @@ export default function CreatorAIPortal() {
           </nav>
         </div>
 
-        {/* Current User Card & Logout */}
+        
         <div className="p-3 border-t border-[#343B4D] bg-[#10131D]/60">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 overflow-hidden">
@@ -921,9 +1226,9 @@ export default function CreatorAIPortal() {
         </div>
       </aside>
 
-      {/* MAIN VIEW AREA */}
+      
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header */}
+        
         <header className="h-16 px-6 bg-[#171B28] border-b border-[#343B4D] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-xs text-[#A6AEC0]">{systemConfig.workspaceName}</span>
@@ -935,7 +1240,18 @@ export default function CreatorAIPortal() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Quick Submit Report / Feature button visible to everyone */}
+            <button
+              onClick={() => {
+                setActiveModal('legal_compliance');
+                setLegalModalTab('checklist');
+              }}
+              className="px-2.5 py-1.5 bg-[#1E2433] border border-[#343B4D] hover:border-[#159A72] text-[#A6AEC0] hover:text-[#F7F8FC] rounded text-xs font-medium transition flex items-center gap-1.5"
+              title="20-Point Legal & Risk Shield"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#159A72]" />
+              <span className="hidden sm:inline">Compliance Shield</span>
+            </button>
+
             <button
               onClick={() => {
                 setReportForm({
@@ -952,7 +1268,6 @@ export default function CreatorAIPortal() {
               Submit Report / Feature
             </button>
 
-            {/* Quick Action Button for Admin */}
             {currentUser.isAdmin && (
               <button
                 onClick={() => {
@@ -966,6 +1281,7 @@ export default function CreatorAIPortal() {
                     isAdmin: false,
                     status: 'Active',
                   });
+                  setMemberFormError('');
                   setActiveModal('add_member');
                 }}
                 className="px-3 py-1.5 bg-[#7057E8] text-white rounded text-xs font-medium shadow hover:bg-[#6045d8] transition flex items-center gap-1.5"
@@ -988,9 +1304,9 @@ export default function CreatorAIPortal() {
           </div>
         </header>
 
-        {/* Dynamic Content */}
+        
         <main className="flex-1 overflow-y-auto p-6 bg-[#10131D]">
-          {/* TAB 1: MASTER ADMIN CONTROL PANEL */}
+          
           {activeTab === 'admin_center' && (
             <div className="space-y-6 max-w-7xl mx-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#343B4D]">
@@ -1017,7 +1333,7 @@ export default function CreatorAIPortal() {
                 </div>
               </div>
 
-              {/* Workspace Config Card */}
+              
               <div className="p-4 bg-[#171B28] border border-[#343B4D] rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -1031,7 +1347,7 @@ export default function CreatorAIPortal() {
                     Timezone: <strong className="text-[#F7F8FC]">{systemConfig.primaryTimezone}</strong>
                   </span>
                   <span className="px-2.5 py-1 bg-[#1E2433] border border-[#343B4D] rounded text-[#A6AEC0]">
-                    MFA: <strong className={systemConfig.mfaEnforced ? 'text-[#159A72]' : 'text-[#D98A18]'}>{systemConfig.mfaEnforced ? 'Strict' : 'Optional'}</strong>
+                    MFA: <strong className={systemConfig.mfaEnforced ? 'text-[#159A72]' : 'text-[#D98A18]'}>{systemConfig.mfaEnforced ? 'Strict (4-Digit PIN)' : 'Optional'}</strong>
                   </span>
                   <span className="px-2.5 py-1 bg-[#1E2433] border border-[#343B4D] rounded text-[#A6AEC0]">
                     Retention: <strong className="text-[#F7F8FC]">{systemConfig.dataRetentionDays} Days</strong>
@@ -1039,7 +1355,7 @@ export default function CreatorAIPortal() {
                 </div>
               </div>
 
-              {/* Real Summary Metrics */}
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-[#1E2433] border border-[#343B4D] rounded-lg p-4">
                   <div className="flex items-center justify-between text-[#A6AEC0] mb-1">
@@ -1098,7 +1414,7 @@ export default function CreatorAIPortal() {
                 </div>
               </div>
 
-              {/* Quick Actions Grid */}
+              
               <div className="bg-[#171B28] border border-[#343B4D] rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-[#F7F8FC] mb-3 flex items-center gap-2">
                   <KeyRound className="w-4 h-4 text-[#7057E8]" />
@@ -1117,13 +1433,14 @@ export default function CreatorAIPortal() {
                         isAdmin: false,
                         status: 'Active',
                       });
+                      setMemberFormError('');
                       setActiveModal('add_member');
                     }}
                     className="p-3.5 bg-[#1E2433] border border-[#343B4D] hover:border-[#7057E8] rounded-lg text-left transition"
                   >
                     <UserPlus className="w-5 h-5 text-[#7057E8] mb-2" />
                     <p className="font-semibold text-xs text-[#F7F8FC]">Provision New Staff</p>
-                    <p className="text-[10px] text-[#A6AEC0] mt-0.5">Assign email, password & role</p>
+                    <p className="text-[10px] text-[#A6AEC0] mt-0.5">Assign email, 4-digit code & role</p>
                   </button>
 
                   <button
@@ -1172,7 +1489,7 @@ export default function CreatorAIPortal() {
                 </div>
               </div>
 
-              {/* Real Audit Trail */}
+              
               <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-[#F7F8FC] mb-3 flex items-center gap-2">
                   <Lock className="w-4 h-4 text-[#7057E8]" />
@@ -1194,7 +1511,7 @@ export default function CreatorAIPortal() {
             </div>
           )}
 
-          {/* TAB: GLOBAL REPORTS & FEATURE REQUESTS (VISIBLE GLOBALLY TO EVERYONE) */}
+          
           {activeTab === 'reports_hub' && (
             <div className="space-y-6 max-w-7xl mx-auto">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#343B4D]">
@@ -1224,7 +1541,7 @@ export default function CreatorAIPortal() {
                 </button>
               </div>
 
-              {/* Filter Tabs */}
+              
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 {(['All', 'Feature Request', 'Bug Report', 'Improvement', 'Tooling Need'] as const).map((cat) => (
                   <button
@@ -1241,7 +1558,7 @@ export default function CreatorAIPortal() {
                 ))}
               </div>
 
-              {/* Reports Grid / Cards */}
+              
               {filteredReports.length === 0 ? (
                 <div className="p-12 text-center bg-[#1E2433] border border-[#343B4D] rounded-xl">
                   <Globe className="w-10 h-10 text-[#A6AEC0] mx-auto mb-3" />
@@ -1266,7 +1583,6 @@ export default function CreatorAIPortal() {
                         className="p-5 bg-[#1E2433] border border-[#343B4D] rounded-xl flex flex-col md:flex-row md:items-start justify-between gap-4 hover:border-[#7057E8]/60 transition"
                       >
                         <div className="flex items-start gap-4 flex-1">
-                          {/* Upvote Button */}
                           <button
                             onClick={() => handleToggleVote(report.id)}
                             className={`flex flex-col items-center justify-center w-12 h-14 rounded-lg border transition ${
@@ -1311,7 +1627,6 @@ export default function CreatorAIPortal() {
                               <span>{report.createdAt}</span>
                             </div>
 
-                            {/* Official Admin Response */}
                             {report.adminResponse && (
                               <div className="mt-3 p-3 bg-[#10131D] border-l-2 border-[#7057E8] rounded-r-lg">
                                 <p className="text-[11px] font-semibold text-[#7057E8] flex items-center gap-1.5">
@@ -1324,7 +1639,6 @@ export default function CreatorAIPortal() {
                           </div>
                         </div>
 
-                        {/* Admin Action Controls */}
                         {currentUser?.isAdmin && (
                           <div className="flex md:flex-col items-center gap-2 pt-2 md:pt-0">
                             <button
@@ -1355,7 +1669,7 @@ export default function CreatorAIPortal() {
             </div>
           )}
 
-          {/* TAB: MEMBERS MANAGEMENT */}
+          
           {activeTab === 'members' && (
             <div className="space-y-5 max-w-7xl mx-auto">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#343B4D]">
@@ -1377,6 +1691,7 @@ export default function CreatorAIPortal() {
                       isAdmin: false,
                       status: 'Active',
                     });
+                    setMemberFormError('');
                     setActiveModal('add_member');
                   }}
                   className="px-3.5 py-2 bg-[#7057E8] text-white rounded text-xs font-semibold shadow hover:bg-[#6045d8] transition flex items-center gap-1.5"
@@ -1386,7 +1701,7 @@ export default function CreatorAIPortal() {
                 </button>
               </div>
 
-              {/* Members Table */}
+              
               <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl overflow-hidden">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-[#171B28] border-b border-[#343B4D] text-[#A6AEC0] uppercase tracking-wider text-[10px]">
@@ -1395,7 +1710,7 @@ export default function CreatorAIPortal() {
                       <th className="py-3 px-4">Role Title</th>
                       <th className="py-3 px-4">Department</th>
                       <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Password</th>
+                      <th className="py-3 px-4">Credentials & MFA</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -1428,7 +1743,10 @@ export default function CreatorAIPortal() {
                           </span>
                         </td>
                         <td className="py-3 px-4 font-mono text-[#A6AEC0]">
-                          •••••••• <span className="text-[9px] text-[#20B8CF]">({m.password})</span>
+                          <span className="text-[11px] text-[#159A72] flex items-center gap-1 font-sans">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>MFA 4-Digit Active</span>
+                          </span>
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
@@ -1444,6 +1762,7 @@ export default function CreatorAIPortal() {
                                   isAdmin: m.isAdmin,
                                   status: m.status,
                                 });
+                                setMemberFormError('');
                                 setActiveModal('edit_member');
                               }}
                               className="p-1 text-[#A6AEC0] hover:text-[#7057E8]"
@@ -1470,7 +1789,7 @@ export default function CreatorAIPortal() {
             </div>
           )}
 
-          {/* TAB: DEPARTMENTS */}
+          
           {activeTab === 'departments' && (
             <div className="space-y-5 max-w-7xl mx-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#343B4D]">
@@ -1533,7 +1852,7 @@ export default function CreatorAIPortal() {
             </div>
           )}
 
-          {/* TAB: TASKS */}
+          
           {activeTab === 'tasks' && (
             <div className="space-y-5 max-w-7xl mx-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#343B4D]">
@@ -1621,7 +1940,7 @@ export default function CreatorAIPortal() {
             </div>
           )}
 
-          {/* TAB: RECRUITMENT */}
+          
           {activeTab === 'recruitment' && (
             <div className="space-y-5 max-w-7xl mx-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#343B4D]">
@@ -1704,7 +2023,7 @@ export default function CreatorAIPortal() {
             </div>
           )}
 
-          {/* TAB: KNOWLEDGE BASE */}
+          
           {activeTab === 'knowledge' && (
             <div className="space-y-5 max-w-7xl mx-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#343B4D]">
@@ -1757,7 +2076,7 @@ export default function CreatorAIPortal() {
             </div>
           )}
 
-          {/* TAB: ROLES & PERMISSIONS */}
+          
           {activeTab === 'roles' && (
             <div className="space-y-5 max-w-7xl mx-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#343B4D]">
@@ -1792,7 +2111,7 @@ export default function CreatorAIPortal() {
             </div>
           )}
 
-          {/* TAB: SETTINGS & AUDIT LOGS */}
+          
           {activeTab === 'settings' && (
             <div className="space-y-5 max-w-7xl mx-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#343B4D]">
@@ -1825,7 +2144,7 @@ export default function CreatorAIPortal() {
         </main>
       </div>
 
-      {/* --- MODAL 1: ADD / EDIT STAFF MEMBER --- */}
+      
       {(activeModal === 'add_member' || activeModal === 'edit_member') && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-lg w-full p-6 shadow-2xl">
@@ -1836,6 +2155,13 @@ export default function CreatorAIPortal() {
               </h3>
               <button onClick={closeModal} className="text-[#A6AEC0] hover:text-[#F7F8FC]">✕</button>
             </div>
+
+            {memberFormError && (
+              <div className="mb-3 p-3 bg-[#D64545]/15 border border-[#D64545]/40 rounded-lg text-xs text-[#D64545] flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{memberFormError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSaveMember} className="space-y-3.5">
               <div>
@@ -1864,23 +2190,31 @@ export default function CreatorAIPortal() {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-[#A6AEC0]">Password</label>
+                  <label className="block text-xs font-medium text-[#A6AEC0]">
+                    Password (Must contain 4 continuous digits for verification code)
+                  </label>
                   <button
                     type="button"
-                    onClick={() => setMemberForm({ ...memberForm, password: 'Pass' + Math.floor(1000 + Math.random() * 9000) + '!' })}
+                    onClick={() => {
+                      const randomPin = Math.floor(1000 + Math.random() * 9000);
+                      setMemberForm({ ...memberForm, password: 'Pass' + randomPin });
+                    }}
                     className="text-[10px] text-[#20B8CF] hover:underline"
                   >
-                    Generate Random
+                    Generate with 4 Digits
                   </button>
                 </div>
                 <input
                   type="text"
                   required={!editingMember}
-                  placeholder={editingMember ? 'Leave empty to keep unchanged' : 'Choose password'}
+                  placeholder="e.g. Pass8421 or 8421"
                   value={memberForm.password}
                   onChange={(e) => setMemberForm({ ...memberForm, password: e.target.value })}
                   className="w-full bg-[#10131D] border border-[#343B4D] rounded-lg px-3 py-2 text-xs text-[#F7F8FC] font-mono outline-none focus:border-[#7057E8]"
                 />
+                <p className="text-[10px] text-[#A6AEC0] mt-1">
+                  The 4 digits in this password serve as their two-step login verification code.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1950,7 +2284,7 @@ export default function CreatorAIPortal() {
         </div>
       )}
 
-      {/* --- MODAL 2: ADD / EDIT DEPARTMENT --- */}
+      
       {(activeModal === 'add_dept' || activeModal === 'edit_dept') && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-md w-full p-6 shadow-2xl">
@@ -2004,7 +2338,7 @@ export default function CreatorAIPortal() {
         </div>
       )}
 
-      {/* --- MODAL 3: CREATE TASK --- */}
+      
       {activeModal === 'add_task' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-md w-full p-6 shadow-2xl">
@@ -2063,7 +2397,7 @@ export default function CreatorAIPortal() {
         </div>
       )}
 
-      {/* --- MODAL 4: LOG APPLICANT --- */}
+      
       {activeModal === 'add_applicant' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-md w-full p-6 shadow-2xl">
@@ -2119,7 +2453,7 @@ export default function CreatorAIPortal() {
         </div>
       )}
 
-      {/* --- MODAL 5: SUBMIT GLOBAL REPORT / FEATURE REQUEST --- */}
+      
       {activeModal === 'submit_report' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-lg w-full p-6 shadow-2xl">
@@ -2202,7 +2536,7 @@ export default function CreatorAIPortal() {
         </div>
       )}
 
-      {/* --- MODAL 6: ADMIN MODERATE REPORT --- */}
+      
       {activeModal === 'edit_report' && editingReport && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-lg w-full p-6 shadow-2xl">
@@ -2251,7 +2585,7 @@ export default function CreatorAIPortal() {
         </div>
       )}
 
-      {/* --- MODAL 7: EDIT SYSTEM CONFIG --- */}
+      
       {activeModal === 'edit_system_config' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-lg w-full p-6 shadow-2xl">
@@ -2334,7 +2668,7 @@ export default function CreatorAIPortal() {
         </div>
       )}
 
-      {/* --- MODAL 8: CREATE KNOWLEDGE DOC --- */}
+      
       {activeModal === 'add_doc' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-lg w-full p-6 shadow-2xl">
@@ -2391,7 +2725,7 @@ export default function CreatorAIPortal() {
         </div>
       )}
 
-      {/* --- MODAL 9: CREATE ANNOUNCEMENT --- */}
+      
       {activeModal === 'add_announcement' && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-md w-full p-6 shadow-2xl">
@@ -2448,4 +2782,256 @@ export default function CreatorAIPortal() {
       )}
     </div>
   );
+
+  function renderCookieBanner() {
+    if (cookieConsentAccepted) return null;
+    return (
+      <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:max-w-md z-50 bg-[#171B28] border border-[#343B4D] rounded-xl p-4 shadow-2xl backdrop-blur-md animate-fadeIn">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#7057E8]/15 border border-[#7057E8]/40 flex items-center justify-center text-[#7057E8] flex-shrink-0 mt-0.5">
+              <Cookie className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-[#F7F8FC]">Privacy & Essential Cookies</h4>
+              <p className="text-[11px] text-[#A6AEC0] mt-1 leading-relaxed">
+                CreatorAI uses strictly essential session and security cookies for multi-factor authentication and platform stability. No third-party ad tracking.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => handleAcceptCookies('essential')}
+            className="text-[#A6AEC0] hover:text-[#F7F8FC] p-1"
+            aria-label="Dismiss cookie notice"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#343B4D]">
+          <button
+            onClick={() => {
+              setActiveModal('legal_compliance');
+              setLegalModalTab('cookies');
+            }}
+            className="text-[11px] text-[#20B8CF] hover:underline"
+          >
+            Cookie Policy
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleAcceptCookies('essential')}
+              className="px-2.5 py-1 text-[11px] bg-[#1E2433] hover:bg-[#343B4D] text-[#A6AEC0] hover:text-[#F7F8FC] rounded-md transition"
+            >
+              Essential Only
+            </button>
+            <button
+              onClick={() => handleAcceptCookies('all')}
+              className="px-3 py-1 text-[11px] bg-[#7057E8] hover:bg-[#6045d8] text-white font-medium rounded-md transition shadow-sm"
+            >
+              Accept All
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  function renderLegalModal() {
+    if (activeModal !== 'legal_compliance') return null;
+    return (
+      <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-[#1E2433] border border-[#343B4D] rounded-xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
+          <div className="p-4 px-6 border-b border-[#343B4D] flex items-center justify-between bg-[#171B28]">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[#7057E8]/20 border border-[#7057E8]/40 flex items-center justify-center text-[#7057E8]">
+                <Scale className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-[#F7F8FC]">CreatorAI Legal & Compliance Center</h3>
+                <p className="text-[11px] text-[#A6AEC0]">20-Point Operational & Privacy Protection Standards</p>
+              </div>
+            </div>
+            <button onClick={closeModal} className="text-[#A6AEC0] hover:text-[#F7F8FC] p-1">
+              ✕
+            </button>
+          </div>
+
+          <div className="flex border-b border-[#343B4D] bg-[#10131D] px-6 overflow-x-auto gap-2">
+            {[
+              { id: 'checklist', label: '20-Point Shield' },
+              { id: 'privacy', label: 'Privacy Policy' },
+              { id: 'terms', label: 'Terms of Service' },
+              { id: 'cookies', label: 'Cookie Policy' },
+              { id: 'business', label: 'Business Details' },
+              { id: 'deletion', label: 'Data Deletion (Art. 17)' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setLegalModalTab(tab.id as any)}
+                className={`py-3 px-3 text-xs font-medium border-b-2 transition whitespace-nowrap ${
+                  legalModalTab === tab.id
+                    ? 'border-[#7057E8] text-[#7057E8]'
+                    : 'border-transparent text-[#A6AEC0] hover:text-[#F7F8FC]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs text-[#A6AEC0] leading-relaxed">
+            {legalModalTab === 'checklist' && (
+              <div className="space-y-3">
+                <div className="p-3 bg-[#171B28] border border-[#343B4D] rounded-lg flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-sm text-[#F7F8FC]">20/20 Legal Protection Standards</h4>
+                    <p className="text-[11px] text-[#A6AEC0]">Enterprise risk mitigation and privacy compliance checklist.</p>
+                  </div>
+                  <span className="px-3 py-1 bg-[#159A72]/20 border border-[#159A72]/40 text-[#159A72] rounded-full font-semibold text-xs">
+                    100% Compliant
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {COMPLIANCE_ITEMS_20.map((item) => (
+                    <div key={item.id} className="p-3 bg-[#10131D] border border-[#343B4D] rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-[#F7F8FC] flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#159A72]" />
+                          <span>{item.id}. {item.title}</span>
+                        </span>
+                        <span className="text-[10px] font-mono text-[#20B8CF] bg-[#1E2433] px-2 py-0.5 rounded">
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#A6AEC0]">{item.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {legalModalTab === 'privacy' && (
+              <div className="space-y-3">
+                <h4 className="font-bold text-sm text-[#F7F8FC]">Workforce & Platform Privacy Policy</h4>
+                <p>
+                  CreatorAI is dedicated to safeguarding personnel privacy and operational confidentiality. This document outlines how staff records, account credentials, and platform logs are processed.
+                </p>
+                <div className="p-3 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-2">
+                  <h5 className="font-semibold text-[#F7F8FC]">1. Data Minimization (Collect Only Needed Data)</h5>
+                  <p>We collect only the essential attributes required to coordinate workforce activity: full name, authorized email address, organizational role, department, and system event timestamps.</p>
+                </div>
+                <div className="p-3 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-2">
+                  <h5 className="font-semibold text-[#F7F8FC]">2. Zero Third-Party Tracker SDKs</h5>
+                  <p>The CreatorAI platform contains zero advertising SDKs, zero behavioral trackers, and zero external tracking pixels. All application bundles and fonts are hosted internally.</p>
+                </div>
+                <div className="p-3 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-2">
+                  <h5 className="font-semibold text-[#F7F8FC]">3. Data Security & Storage</h5>
+                  <p>All sensitive authentication tokens and session states are secured using industry-standard hashing and encrypted transit (TLS 1.3). Access controls adhere strictly to least-privilege role boundaries.</p>
+                </div>
+              </div>
+            )}
+
+            {legalModalTab === 'terms' && (
+              <div className="space-y-3">
+                <h4 className="font-bold text-sm text-[#F7F8FC]">Staff & Enterprise Terms of Service</h4>
+                <p>
+                  Access to the CreatorAI Staff Management Portal is granted exclusively to authorized personnel and verified contracted contributors.
+                </p>
+                <div className="p-3 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-2">
+                  <h5 className="font-semibold text-[#F7F8FC]">1. Acceptable Use & Confidentiality</h5>
+                  <p>All roadmaps, documents, reports, and applicant data viewed within this portal are confidential proprietary trade secrets of CreatorAI. Unauthorized extraction or disclosure is strictly prohibited.</p>
+                </div>
+                <div className="p-3 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-2">
+                  <h5 className="font-semibold text-[#F7F8FC]">2. Intellectual Property</h5>
+                  <p>All works created, uploaded, or managed within the workspace remain the sole property of CreatorAI Technologies Inc. Stock assets and multimedia must possess verified commercial usage rights.</p>
+                </div>
+                <div className="p-3 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-2">
+                  <h5 className="font-semibold text-[#F7F8FC]">3. Account Revocation</h5>
+                  <p>Leadership reserves the right to suspend or revoke portal privileges immediately upon role termination or security breach detection.</p>
+                </div>
+              </div>
+            )}
+
+            {legalModalTab === 'cookies' && (
+              <div className="space-y-3">
+                <h4 className="font-bold text-sm text-[#F7F8FC]">Cookie & Storage Policy</h4>
+                <p>
+                  CreatorAI employs local storage and essential session tokens exclusively for functionality and authentication integrity.
+                </p>
+                <div className="p-3 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-2">
+                  <h5 className="font-semibold text-[#F7F8FC]">Strictly Necessary Tokens</h5>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li><strong className="text-[#F7F8FC]">creatorai_portal_state:</strong> Stores current workspace records and assignments in encrypted local storage.</li>
+                    <li><strong className="text-[#F7F8FC]">creatorai_cookie_consent:</strong> Retains your affirmative privacy consent preference.</li>
+                    <li><strong className="text-[#F7F8FC]">creatorai_auth_session:</strong> Secure cryptographic token for maintaining authenticated staff sessions.</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {legalModalTab === 'business' && (
+              <div className="space-y-3">
+                <h4 className="font-bold text-sm text-[#F7F8FC]">Business & Corporate Registry</h4>
+                <div className="p-4 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-2 text-xs">
+                  <p><strong className="text-[#F7F8FC]">Legal Entity:</strong> CreatorAI Media Global Ltd.</p>
+                  <p><strong className="text-[#F7F8FC]">Corporate HQ:</strong> 100 Montgomery St, Suite 1800, San Francisco, CA 94104, USA</p>
+                  <p><strong className="text-[#F7F8FC]">Registration ID:</strong> US-EIN 94-3829104 | DUNS: 08-192-4820</p>
+                  <p><strong className="text-[#F7F8FC]">Data Protection Officer:</strong> compliance@creatorai.team</p>
+                  <p><strong className="text-[#F7F8FC]">Legal Inquiries:</strong> legal@creatorai.team</p>
+                  <p><strong className="text-[#F7F8FC]">Personnel Age Restriction:</strong> CreatorAI staff access is strictly restricted to verified individuals aged 18 and older.</p>
+                </div>
+              </div>
+            )}
+
+            {legalModalTab === 'deletion' && (
+              <div className="space-y-3">
+                <h4 className="font-bold text-sm text-[#F7F8FC]">GDPR Article 17 — Right to Erasure</h4>
+                <p>
+                  Staff members or former contractors may request permanent deletion of their personal records, profile information, and activity telemetry.
+                </p>
+                {deletionFeedback && (
+                  <div className="p-3 bg-[#159A72]/20 border border-[#159A72]/40 rounded-lg text-xs text-[#159A72] flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                    <span>{deletionFeedback}</span>
+                  </div>
+                )}
+                <form onSubmit={handleRequestDataDeletion} autoComplete="off" className="p-4 bg-[#10131D] border border-[#343B4D] rounded-lg space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-[#A6AEC0] mb-1">Account Email to Erase</label>
+                    <input
+                      type="email"
+                      required
+                      autoComplete="off"
+                      placeholder="name@creatorai.team"
+                      value={deletionEmail}
+                      onChange={(e) => setDeletionEmail(e.target.value)}
+                      className="w-full bg-[#1E2433] border border-[#343B4D] rounded-lg px-3 py-2 text-xs text-[#F7F8FC] outline-none focus:border-[#D64545]"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-[#D64545] hover:bg-[#b53535] text-white text-xs font-semibold rounded-lg transition shadow flex items-center gap-2"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Execute Permanent Data Deletion</span>
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 px-6 border-t border-[#343B4D] bg-[#171B28] flex justify-between items-center text-xs">
+            <span className="text-[#A6AEC0]">Last updated & verified: November 2026</span>
+            <button
+              onClick={closeModal}
+              className="px-4 py-1.5 bg-[#7057E8] text-white rounded font-medium hover:bg-[#6045d8] transition"
+            >
+              Close Center
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
 }

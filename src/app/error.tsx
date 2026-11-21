@@ -11,7 +11,6 @@ export default function ErrorBoundary({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Prints error details directly to console/terminal
     console.error('====================================================');
     console.error('🚨 [CreatorAI Portal Runtime Error Detected]');
     console.error(`Timestamp: ${new Date().toISOString()}`);

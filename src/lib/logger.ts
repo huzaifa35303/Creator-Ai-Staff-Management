@@ -1,8 +1,3 @@
-/**
- * Terminal logging utility for CreatorAI
- * Prints Discord-bot style formatted logs directly to the server terminal stdout/stderr.
- */
-
 const colors = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',
